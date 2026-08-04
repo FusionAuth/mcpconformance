@@ -10,6 +10,20 @@
 #   drifted ~11 others' verbatim wording. Full re-extraction at SEP HEAD
 #   is mcpkit#780's lifecycle; this file deliberately holds at 556154c
 #   until that lands.
+# backing_scenarios: three server ClientScenarios under
+#   src/scenarios/server/skills/ emit the check IDs below (a row is "tested"
+#   once a scenario emits its check ID; see src/traceability/):
+#     directory.ts (sep-2640-skills-directory) — sep-2640-capability-directory-read-flag
+#       and the five sep-2640-directory-read-* rows.
+#     index.ts (sep-2640-skills-index) — sep-2640-server-expose-index,
+#       sep-2640-index-entry-type-enum, sep-2640-index-name-required,
+#       sep-2640-index-digest-required, sep-2640-skill-uri-scheme.
+#     manifest.ts (sep-2640-skills-manifest) — sep-2640-skillmd-mimetype,
+#       sep-2640-skillmd-metadata-name, sep-2640-skillmd-metadata-description,
+#       sep-2640-final-segment-equals-name, sep-2640-meta-prefix.
+#   The remaining rows are host-internal or off-wire (host load-by-uri, digest
+#   verification, byte-budget / archive-unpack safety, no-empty-index
+#   assumption) and stay traceability-only for this server-scenario set.
 sep: 2640
 spec_url: https://modelcontextprotocol.io/seps/2640-skills-extension#specification
 requirements:
