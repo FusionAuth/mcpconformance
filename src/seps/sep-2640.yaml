@@ -33,6 +33,13 @@
 #   server-side harness cannot observe and that would need a host-side scenario
 #   set to test.
 #
+# deliberately not declared here: `resultType`, which appears in all three
+#   result examples in this SEP, is a base-protocol field on the common `Result`
+#   interface (schema/2026-07-28/schema.ts), not a SEP-2640 requirement. Servers
+#   MUST include it and clients treat an absent value as "complete". Its
+#   caching-hint obligations belong to sep-2549.yaml. Declaring it here would
+#   double-count a base-protocol rule against this extension.
+#
 # backing_scenarios: three server ClientScenarios under
 #   src/scenarios/server/skills/ emit the check IDs below (a row is "tested"
 #   once a scenario emits its check ID; see src/traceability/):
