@@ -14,26 +14,34 @@ accepted OR-hierarchy.
 Every check grades the **wire**, never the SDK's developer API. That is what
 makes the matrix durable: `modelcontextprotocol/typescript-sdk#1624` was
 rewritten on 2026-08-24 from declarative per-tool scopes to a request-time
-callback, and all nine checks passed unchanged against the new API. The
-OR-hierarchy check included, since it is opt-in and behavioural (call with a
+callback (`f724f405`), and all nine checks passed unchanged against the new API.
+The OR-hierarchy check included, since it is opt-in and behavioural (call with a
 parent-scope token, assert 2xx) rather than an assertion about SDK config.
 
 ## Matrix
 
 All cells re-verified **2026-08-29**.
 
-| SDK ↓ / Provider →                                                       | Keycloak | Okta   | Descope | Entra | WorkOS |
-| ------------------------------------------------------------------------ | -------- | ------ | ------- | ----- | ------ |
+| SDK ↓ / Provider →                                                            | Keycloak | Okta   | Descope | Entra | WorkOS |
+| ----------------------------------------------------------------------------- | -------- | ------ | ------- | ----- | ------ |
 | **TypeScript (PR 1624 ref)** — `panyam/mcp-ts-sdk` `examples/scope-challenge` | ✅ 9/9   | ✅ 9/9 | —       | —     | —      |
-| **mcpkit (Go)** — `panyam/mcpkit` `examples/auth/step-up`                | ✅ 9/9   | ✅ 9/9 | —       | —     | —      |
+| **mcpkit (Go)** — `panyam/mcpkit` `examples/auth/step-up`                     | ✅ 9/9   | ✅ 9/9 | —       | —     | —      |
 
 Legend: ✅ N/9 = checks passing · — = not yet run · ⚠️ = partial (see notes).
 
 The TypeScript SUT is pinned at tag
 [`sut/verified-20260829`](https://github.com/panyam/mcp-ts-sdk/tree/sut/verified-20260829/examples/scope-challenge)
-on `panyam/mcp-ts-sdk`, branched from `SamMorrowDrums/typescript-sdk`
-`scope-challenge-server-sdk` at `77846c28`. The tag is the reproducible ref; the
-branch moves as PR 1624 does.
+on `panyam/mcp-ts-sdk`. The tag is the reproducible ref; the branch moves as
+PR 1624 does.
+
+**What the TypeScript row actually tested.** The SDK under test is
+`SamMorrowDrums/typescript-sdk` `scope-challenge-server-sdk` at `77846c28`, which
+is PR 1624's head: upstream `main` as of 2026-08-26 plus the single feature
+commit `f724f405`. The tag adds exactly one commit on top, and it touches
+`examples/` and `pnpm-lock.yaml` only, so no SDK package code is modified by the
+harness. This cannot be run against upstream `main`, which has no
+`packages/server/src/server/scopeChallenge.ts` and will not compile. Note that
+`main` has since moved ahead of Sam's branch (`70de0c8b`, unrelated to scopes).
 
 ## How each cell is produced
 
