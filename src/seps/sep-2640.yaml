@@ -23,6 +23,16 @@
 #   archive rows) and four were reworded. Because the SEP is mid-vote, expect one
 #   more pass at the CM-stamped head.
 #
+# coverage: extracted against branch head a3e147ca2710 (2026-08-25), the commit
+#   the CM vote is running on. A keyword sweep of the source finds 97 sentences
+#   carrying an RFC 2119 term; this file declares 89 checks plus 7 excluded rows.
+#   The residual handful are restatements that fold into a declared row rather
+#   than standing alone. Of the 89 declared checks, 40 are exercised on the wire
+#   by the three server scenarios; the other 49 are host obligations (retrieval
+#   policy, approval binding, cache isolation, context handling) that a
+#   server-side harness cannot observe and that would need a host-side scenario
+#   set to test.
+#
 # backing_scenarios: three server ClientScenarios under
 #   src/scenarios/server/skills/ emit the check IDs below (a row is "tested"
 #   once a scenario emits its check ID; see src/traceability/):
@@ -62,6 +72,8 @@ requirements:
   # SKILL.md MUST NOT appear in any descendant directory.
   - check: sep-2640-nested-skills-permitted
     text: 'A `SKILL.md` MAY appear in a descendant directory of a skill — skills can nest.'
+  - check: sep-2640-nested-skillmd-not-acted-on
+    text: 'From the enclosing skill''s perspective, a nested skill''s directory and files are ordinary supporting files, and reading them is ordinary reading. A nested `SKILL.md` read this way is ordinary markdown: hosts MUST NOT act on its frontmatter.'
   - check: sep-2640-nested-publication-flat
     text: "A nested skill is published like any other: through its own `skills/list` entry, or by explicit reference. The listing remains flat — an entry for a nested skill is an ordinary entry whose `uri` happens to share a path prefix with the enclosing skill's, and nothing in the listing marks nesting."
 
@@ -117,6 +129,10 @@ requirements:
     text: "The final `<skill-path>` segment of the entry's `uri` MUST equal `frontmatter.name`, per Resource Mapping."
   - check: sep-2640-metadata-reserved-prefix
     text: 'Within the frontmatter `metadata` object, keys prefixed with `io.modelcontextprotocol/` are reserved for metadata defined by MCP extensions. This extension currently defines no such keys. Implementations SHOULD ignore keys under this prefix that they do not recognize.'
+  - check: sep-2640-names-should-be-unique
+    text: "Within a server's listing, names SHOULD be unique, but they are not guaranteed to be."
+  - check: sep-2640-host-disambiguate-listing-collision
+    text: 'When two entries in one listing collide on `name`, hosts MUST disambiguate them — for example by their distinguishing path segments — rather than silently discarding or preferring one.'
   - check: sep-2640-names-not-unique
     text: "A skill's `name` is a label, not an identifier. Within a server's listing, names SHOULD be unique, but they are not guaranteed to be. Hosts MUST NOT assume name uniqueness. When two entries in one listing collide on `name`, hosts MUST disambiguate them — for example by their distinguishing path segments — rather than silently discarding or preferring one."
 
@@ -161,6 +177,8 @@ requirements:
   # === Reading / integrity (host obligations) ===
   - check: sep-2640-host-load-by-uri
     text: 'hosts MUST support loading a skill given only its URI'
+  - check: sep-2640-read-is-not-a-load
+    text: 'Hosts MUST NOT treat a `resources/read` of a `SKILL.md` that arrives by any other route as a load: it grants no approval, opens no window, and confers no standing on the skill''s supporting files.'
   - check: sep-2640-host-verify-digest
     text: 'When a host retrieves a file listed in a skill''s `resources`, it MUST verify the content against that entry''s digest. Whatever the cause, hosts MUST NOT use the unverified content.'
   - check: sep-2640-host-size-mismatch-failure
@@ -186,6 +204,65 @@ requirements:
   - check: sep-2640-host-nested-fresh-consent
     text: 'Activating a nested skill — loading it as a skill in its own right — requires fresh, explicit user consent; approval of the enclosing skill does not substitute for it. A nested `SKILL.md` read as supporting content is ordinary markdown: hosts MUST NOT act on its frontmatter.'
 
+  - check: sep-2640-host-origin-tag-visible
+    text: 'Hosts MUST tag MCP-served skill content with its originating server identity at the point it enters model context, and MUST NOT present it as indistinguishable from a local filesystem skill.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-untrusted-input
+    text: 'Hosts MUST treat MCP-served skill content as untrusted model input, subject to the same prompt-injection defenses applied to any server-provided text. A server being connected does not make its skill content authoritative.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-skills-are-data-not-directives
+    text: 'Hosts MUST NOT treat skill resources as higher-authority than other context. Explicit user policy governs whether a skill is loaded at all.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-cache-path-encodes-origin
+    text: 'Any path at which a host materializes skill content, whether a cache directory or a virtual mount, MUST encode the server identity as well as the `uri`, so that same-URI skills from different servers land at distinct paths and the originating server is recoverable from the path.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-higher-risk-surface
+    text: 'Hosts MUST treat MCP-served skills as a higher-risk surface than remote tool invocation.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-no-implicit-local-execution
+    text: 'Hosts MUST NOT allow MCP-served skill content to cause host-side code execution without explicit per-skill user approval.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-exec-gate-while-acting
+    text: 'Hosts MUST apply the same approval gate to code-execution tool calls issued while the model is acting on an MCP-served skill.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-reads-bound-to-origin
+    text: 'Hosts MUST bind such reads to the skill''s originating server: a skill served by server A MUST NOT cause a `resources/read` against server B.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-cross-origin-read-approval
+    text: 'Any cross-origin read MUST be gated behind explicit per-call user approval naming both servers.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-label-not-serverinfo-name
+    text: 'Hosts MUST identify servers by a host-assigned label, not the server''s self-reported `serverInfo.name`.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-no-implicit-permission-grants
+    text: 'Hosts MUST NOT honor frontmatter fields that widen the model''s tool or filesystem permissions when the skill arrives over MCP.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-ignore-allowed-tools
+    text: 'The Agent Skills `allowed-tools` field, which a filesystem-sourced skill uses to declare the tools available while it runs, MUST be ignored for MCP-origin skills.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-intermediary-meta-prefix
+    text: 'Intermediaries MAY attach provenance or verification annotations via `_meta` under their own reverse-domain prefix — not the `io.modelcontextprotocol.skills/` prefix reserved for this extension.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-cache-write-isolation
+    text: 'Hosts that cache skill content on disk MUST do one of the following for every file served from the cache: keep the cache where nothing but the host can write to it, or re-hash the file against the entry on every read.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-cache-excluded-from-discovery
+    text: 'Hosts that cache MCP-served skill content on disk MUST also do so in a location excluded from every filesystem-skill discovery path, and MUST treat content loaded from there as MCP-origin.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - check: sep-2640-host-cache-removal-on-server-removal
+    text: "Hosts SHOULD remove a server's cached skill content when the user removes that server."
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+
+  # === Implementation Guidelines (host + SDK) ===
+  - check: sep-2640-host-registry-no-fetch
+    text: 'Assembling the registry reads only the listing: the host MUST NOT fetch `SKILL.md` or any supporting file at this stage.'
+  - check: sep-2640-host-virtual-mount-lazy
+    text: 'A virtual mount resolves reads on access; it MUST NOT be populated by fetching the skill''s files in advance.'
+  - check: sep-2640-host-surface-directory-read
+    text: 'When the originating server declares `directoryRead`, the host SHOULD surface this capability to the model.'
+  - check: sep-2640-sdk-convenience-wrappers
+    text: 'SDK maintainers SHOULD provide affordances that wrap the underlying resource operations in skill-specific terms. The SDK handles: reading `SKILL.md` frontmatter to populate resource metadata, serving file content on `resources/read`, and answering `skills/get` — and, where the server''s skill set is bounded, `skills/list` — computing entry digests and sizes from the registered files, and warning when a registered skill exceeds the Limits.'
+
   # === Directory Listing (resources/directory/read) ===
   - check: sep-2640-directory-read-method-registered
     text: 'A server that declares `directoryRead` MUST support the method for every directory within the skill namespaces it serves as individual files.'
@@ -205,18 +282,6 @@ requirements:
   # === Excluded: not observable on the MCP wire ===
   - text: 'Per RFC 3986, the first segment of `<skill-path>` occupies the authority component. This carries no special semantics under this convention and clients MUST NOT attempt DNS or network resolution of it.'
     excluded: 'DNS and network resolution sit below the MCP wire layer; the harness cannot observe whether the client performed name lookups on URI authority components.'
-  - text: 'Hosts MUST treat MCP-served skill content as untrusted model input, subject to the same prompt-injection defenses applied to any server-provided text. A server being connected does not make its skill content authoritative.'
-    excluded: 'Internal host policy: "treats as untrusted" is an assertion about how content is reasoned over downstream of the read, not about wire traffic.'
-    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
-  - text: 'Hosts MUST NOT honor mechanisms in skill content that would cause local code execution without explicit user opt-in. This includes, non-exhaustively: hook declarations, pre/post-invocation scripts, shell commands embedded in frontmatter, or any field that a filesystem-sourced skill might use to register executable behavior on the host.'
-    excluded: 'Local code execution and explicit user opt-in are host-side filesystem and UX behaviors; not protocol-observable on the wire.'
-    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
-  - text: 'Hosts MUST either ignore such fields entirely when the skill arrives over MCP, or gate them behind an explicit per-skill user approval that states what will execute and where.'
-    excluded: 'Either branch (silent ignore vs. UI-gated approval) is a host-internal handling choice; not protocol-observable.'
-    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
-  - text: 'Hosts MUST NOT treat skill resources as higher-authority than other context. Explicit user policy governs whether a skill is loaded at all.'
-    excluded: 'Context-authority ordering is an internal prompting decision; not protocol-observable.'
-    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
   - text: "Hosts SHOULD indicate which server a skill originates from when presenting it, SHOULD let users inspect a skill's content before it is loaded into model context"
     excluded: 'UI presentation requirements (origin indicator, pre-load inspection); the harness cannot observe what the host displays to users.'
     url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
@@ -224,9 +289,6 @@ requirements:
     excluded: 'The window is defined by what is in the model''s context, which is host-internal state the harness cannot observe. It scopes several wire-observable rules but is not itself checkable.'
   - text: 'Hosts SHOULD instead cache what they do retrieve, and digests make that cache cheap to validate: a cached file whose digest matches the current entry can be served without fetching it again.'
     excluded: 'Cache hits are the absence of a request. A harness cannot distinguish a compliant cache from a host that simply did not need the file again.'
-  - text: 'Any path at which a host materializes skill content, whether a cache directory or a virtual mount, MUST encode the server identity as well as the `uri`, so that same-URI skills from different servers land at distinct paths.'
-    excluded: 'Disk layout and cache-path construction are host-local filesystem concerns with no wire representation.'
-    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
   - text: 'A host that declines a skill on this basis SHOULD tell the user why rather than fail silently on a later read.'
     excluded: 'User-facing messaging; not protocol-observable.'
   - text: 'For a skill whose `resources` is `"dynamic"`, the entry offers nothing to count. A host that chooses to load such a skill applies the total-size limit to what it actually retrieves and MAY stop loading the skill once that limit is reached.'

@@ -75,7 +75,8 @@ const ENTRY_IDS = [
   'sep-2640-limit-total-size',
   'sep-2640-metadata-reserved-prefix',
   'sep-2640-name-naming-rules',
-  'sep-2640-authority-reg-name'
+  'sep-2640-authority-reg-name',
+  'sep-2640-names-should-be-unique'
 ] as const;
 
 const GET_IDS = [
@@ -726,6 +727,33 @@ function entryChecks(entries: SkillEntry[]): ConformanceCheck[] {
       badAuthority.length === 0
         ? { details: { entryCount: entries.length } }
         : { errorMessage: joinErrs(badAuthority) }
+    )
+  );
+
+  // === names-should-be-unique (SHOULD) ===
+  // A collision is explicitly permitted — two skills at different paths may
+  // share a final segment — so this is a WARNING that tells a host operator the
+  // listing will need disambiguating, not a failure.
+  const byName = new Map<string, string[]>();
+  entries.forEach((e) => {
+    if (typeof e.uri !== 'string') return;
+    const n = skillNameFromManifestUri(e.uri);
+    if (n === undefined) return;
+    byName.set(n, [...(byName.get(n) ?? []), e.uri]);
+  });
+  const collisions = [...byName.entries()]
+    .filter(([, uris]) => uris.length > 1)
+    .map(([n, uris]) => `"${n}" served at ${uris.join(' and ')}`);
+  checks.push(
+    skillsCheck(
+      'sep-2640-names-should-be-unique',
+      "Within a server's listing, names SHOULD be unique, but they are not guaranteed to be.",
+      collisions.length === 0 ? 'SUCCESS' : 'WARNING',
+      collisions.length === 0
+        ? { details: { distinctNames: byName.size } }
+        : {
+            errorMessage: `Names collide within one listing, so hosts MUST disambiguate them: ${joinErrs(collisions)}`
+          }
     )
   );
 
