@@ -158,9 +158,10 @@ export async function skillsCapability(
  * at Final status, they do not. The envelope is a non-conformant shape emitted
  * by at least one SDK, so it is reported rather than silently accepted.
  */
-export function settingsAreInline(
-  skills: Record<string, unknown>
-): { inline: boolean; envelopeKeys: string[] } {
+export function settingsAreInline(skills: Record<string, unknown>): {
+  inline: boolean;
+  envelopeKeys: string[];
+} {
   const envelopeKeys = ['config', 'specVersion', 'stability', 'id'].filter(
     (k) => k in skills
   );

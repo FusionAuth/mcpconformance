@@ -368,7 +368,9 @@ function entryChecks(entries: SkillEntry[]): ConformanceCheck[] {
   entries.forEach((e, i) => {
     const fm = e.frontmatter;
     if (!fm || typeof fm !== 'object' || Array.isArray(fm)) {
-      fmErrs.push(`${entryLabel(e, i)}: frontmatter is missing or not an object`);
+      fmErrs.push(
+        `${entryLabel(e, i)}: frontmatter is missing or not an object`
+      );
       return;
     }
     const obj = fm as Record<string, unknown>;
@@ -426,7 +428,9 @@ function entryChecks(entries: SkillEntry[]): ConformanceCheck[] {
   // skills under another scheme native to its domain and no scheme is
   // privileged, so a deviation is a WARNING rather than a failure.
   const otherScheme = entries
-    .filter((e) => typeof e.uri === 'string' && !e.uri.startsWith(SKILL_URI_SCHEME))
+    .filter(
+      (e) => typeof e.uri === 'string' && !e.uri.startsWith(SKILL_URI_SCHEME)
+    )
     .map((e) => String(e.uri));
   checks.push(
     skillsCheck(
@@ -469,8 +473,9 @@ function entryChecks(entries: SkillEntry[]): ConformanceCheck[] {
   // Entries carrying an array are the only ones the remaining checks apply to.
   const arrayEntries = entries
     .map((e, i) => ({ e, i, arr: resourcesArray(e) }))
-    .filter((x): x is { e: SkillEntry; i: number; arr: SkillResourceEntry[] } =>
-      x.arr !== undefined
+    .filter(
+      (x): x is { e: SkillEntry; i: number; arr: SkillResourceEntry[] } =>
+        x.arr !== undefined
     );
 
   const dynamicOnlyReason =
@@ -561,7 +566,10 @@ function entryChecks(entries: SkillEntry[]): ConformanceCheck[] {
     const digestErrs: string[] = [];
     for (const { e, i, arr } of arrayEntries) {
       for (const r of arr) {
-        if (typeof r.digest !== 'string' || !SKILL_DIGEST_PATTERN.test(r.digest)) {
+        if (
+          typeof r.digest !== 'string' ||
+          !SKILL_DIGEST_PATTERN.test(r.digest)
+        ) {
           digestErrs.push(
             `${entryLabel(e, i)}: ${String(r.uri)} digest=${JSON.stringify(r.digest)} is not sha256:{64 lowercase hex}`
           );
@@ -665,7 +673,9 @@ function entryChecks(entries: SkillEntry[]): ConformanceCheck[] {
     if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return;
     for (const key of Object.keys(meta as Record<string, unknown>)) {
       if (key.startsWith(FRONTMATTER_RESERVED_PREFIX)) {
-        reservedErrs.push(`${entryLabel(e, i)}: frontmatter.metadata["${key}"]`);
+        reservedErrs.push(
+          `${entryLabel(e, i)}: frontmatter.metadata["${key}"]`
+        );
       }
     }
   });
@@ -772,7 +782,8 @@ async function readbackChecks(
 ): Promise<ConformanceCheck[]> {
   const checks: ConformanceCheck[] = [];
   const sample = entries.find(
-    (e) => typeof e.uri === 'string' && e.uri.endsWith(`/${SKILL_MANIFEST_FILENAME}`)
+    (e) =>
+      typeof e.uri === 'string' && e.uri.endsWith(`/${SKILL_MANIFEST_FILENAME}`)
   );
   const uri = sample?.uri as string | undefined;
 
@@ -797,7 +808,10 @@ async function readbackChecks(
         { errorMessage: reason }
       )
     );
-    for (const id of ['sep-2640-skillmd-frontmatter', 'sep-2640-entry-frontmatter-identical']) {
+    for (const id of [
+      'sep-2640-skillmd-frontmatter',
+      'sep-2640-entry-frontmatter-identical'
+    ]) {
       checks.push(
         skillsCheck(id, 'SKILL.md is unreadable.', 'SKIPPED', {
           errorMessage: reason
@@ -817,7 +831,10 @@ async function readbackChecks(
         { errorMessage: reason }
       )
     );
-    for (const id of ['sep-2640-skillmd-frontmatter', 'sep-2640-entry-frontmatter-identical']) {
+    for (const id of [
+      'sep-2640-skillmd-frontmatter',
+      'sep-2640-entry-frontmatter-identical'
+    ]) {
       checks.push(
         skillsCheck(id, 'No SKILL.md content to inspect.', 'SKIPPED', {
           errorMessage: reason
@@ -862,7 +879,12 @@ async function readbackChecks(
 
   // === entry-frontmatter-identical ===
   const declared = sample?.frontmatter as Record<string, unknown> | undefined;
-  if (!fm || !declared || typeof declared !== 'object' || Array.isArray(declared)) {
+  if (
+    !fm ||
+    !declared ||
+    typeof declared !== 'object' ||
+    Array.isArray(declared)
+  ) {
     const reason =
       'Either the file has no parseable frontmatter or the entry carries no frontmatter object, so the two cannot be compared.';
     checks.push(
@@ -912,9 +934,7 @@ async function getChecks(
     const reason =
       'No listed entry carries a uri, so skills/get cannot be exercised against a known skill.';
     for (const id of GET_IDS) {
-      checks.push(
-        skillsCheck(id, reason, 'SKIPPED', { errorMessage: reason })
-      );
+      checks.push(skillsCheck(id, reason, 'SKIPPED', { errorMessage: reason }));
     }
     return checks;
   }
@@ -1025,7 +1045,12 @@ async function getChecks(
         'If the URI does not identify a skill the server serves, the server MUST return error -32602 (Invalid params).',
         ok ? 'SUCCESS' : 'FAILURE',
         ok
-          ? { details: { probedUri: UNKNOWN_SKILL_URI, code: unknown.error.code } }
+          ? {
+              details: {
+                probedUri: UNKNOWN_SKILL_URI,
+                code: unknown.error.code
+              }
+            }
           : {
               errorMessage: `skills/get on an unserved URI returned code ${unknown.error.code} (${unknown.error.message}); expected ${JSONRPC_INVALID_PARAMS}.`
             }
