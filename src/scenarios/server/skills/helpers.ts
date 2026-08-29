@@ -4,9 +4,14 @@
  *
  * The scenarios treat the server-under-test as an arbitrary SEP-2640 server:
  * capability is read from `server/discover` (never inferred from an error), and
- * every skill is discovered dynamically from `skill://index.json` and
- * `resources/list` — no fixture-specific URI is hardcoded, so the checks pass
- * against any conformant server, not just one implementation's fixture.
+ * every skill is discovered dynamically through `skills/list` — no
+ * fixture-specific URI is hardcoded, so the checks pass against any conformant
+ * server, not just one implementation's fixture.
+ *
+ * Extracted against the 2026-08-21 revision of the SEP (branch
+ * `sep/skills-extension`), which replaced the `skill://index.json` well-known
+ * resource with the `skills/list` and `skills/get` methods, deferred archive
+ * distribution, and reshaped the skill entry to `{uri, frontmatter, resources}`.
  */
 
 import type {
@@ -20,15 +25,25 @@ import { parse as parseYaml } from 'yaml';
 
 export const SKILLS_EXTENSION_ID = 'io.modelcontextprotocol/skills';
 export const SKILL_URI_SCHEME = 'skill://';
-export const SKILL_INDEX_URI = 'skill://index.json';
 export const SKILL_MANIFEST_FILENAME = 'SKILL.md';
 export const SKILLS_META_PREFIX = 'io.modelcontextprotocol.skills/';
 
-/** `sha256:{hex}` with exactly 64 lowercase hex characters (SEP-2640 index). */
+/** Reserved prefix for MCP-defined keys inside frontmatter `metadata`. */
+export const FRONTMATTER_RESERVED_PREFIX = 'io.modelcontextprotocol/';
+
+export const SKILLS_LIST_METHOD = 'skills/list';
+export const SKILLS_GET_METHOD = 'skills/get';
+export const DIRECTORY_READ_METHOD = 'resources/directory/read';
+
+/** `sha256:{hex}` with exactly 64 lowercase hex characters (SEP-2640). */
 export const SKILL_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
-/** The SEP enumerated `skills[].type` values. */
-export const SKILL_TYPES = ['skill-md', 'archive'] as const;
+/** The `"dynamic"` sentinel a server sets in place of a `resources` array. */
+export const RESOURCES_DYNAMIC = 'dynamic';
+
+/** Per-skill limits fixed by the SEP (§Limits). */
+export const MAX_RESOURCES_PER_SKILL = 512;
+export const MAX_TOTAL_SIZE_PER_SKILL = 16 * 1024 * 1024; // 16 MiB
 
 export const JSONRPC_METHOD_NOT_FOUND = -32601;
 export const JSONRPC_INVALID_PARAMS = -32602;
@@ -47,20 +62,37 @@ export interface SkillResource {
   _meta?: Record<string, unknown>;
 }
 
-/** One `skills[]` entry of the `skill://index.json` document. */
-export interface SkillIndexEntry {
-  name?: string;
-  type?: string;
-  description?: string;
-  url?: string;
-  digest?: string;
+/** One `{uri, digest, size}` triple of a skill entry's `resources` array. */
+export interface SkillResourceEntry {
+  uri?: unknown;
+  digest?: unknown;
+  size?: unknown;
   [key: string]: unknown;
 }
 
-/** The parsed `skill://index.json` document. */
-export interface SkillIndex {
-  $schema?: string;
-  skills?: SkillIndexEntry[];
+/**
+ * One skill entry, as returned by `skills/list` (in `skills[]`) and by
+ * `skills/get` (as `skill`). The two are identical in shape and meaning.
+ */
+export interface SkillEntry {
+  uri?: unknown;
+  frontmatter?: unknown;
+  /** An array of `{uri, digest, size}`, or the string `"dynamic"`. */
+  resources?: unknown;
+  [key: string]: unknown;
+}
+
+export interface SkillsListResult {
+  skills?: unknown;
+  nextCursor?: string;
+  ttlMs?: unknown;
+  cacheScope?: unknown;
+  [key: string]: unknown;
+}
+
+export interface SkillsGetResult {
+  skill?: unknown;
+  nextCursor?: unknown;
   [key: string]: unknown;
 }
 
@@ -112,23 +144,43 @@ export async function skillsCapability(
 }
 
 /**
+ * Whether the declared extension object nests its settings inline, as both
+ * SEP-2133 and SEP-2640 require, rather than wrapping them in an envelope.
+ *
+ * SEP-2133 (status Final) defines `extensions` as "a map of extension
+ * identifiers to per-extension settings objects", and SEP-2640's capability
+ * block matches: `{"io.modelcontextprotocol/skills": {"directoryRead": true}}`.
+ * Neither SEP defines an envelope, and neither has a slot for `id`,
+ * `specVersion` or `stability`.
+ *
+ * An earlier revision of this helper accepted a `config` envelope alongside the
+ * inline form, on the belief that the two SEPs disagreed. Re-reading SEP-2133
+ * at Final status, they do not. The envelope is a non-conformant shape emitted
+ * by at least one SDK, so it is reported rather than silently accepted.
+ */
+export function settingsAreInline(
+  skills: Record<string, unknown>
+): { inline: boolean; envelopeKeys: string[] } {
+  const envelopeKeys = ['config', 'specVersion', 'stability', 'id'].filter(
+    (k) => k in skills
+  );
+  return { inline: envelopeKeys.length === 0, envelopeKeys };
+}
+
+/**
  * Whether the skills extension declares `directoryRead: true`.
  *
- * SEP-2640's capability-declaration example places the flag directly on the
- * extension object (`extensions[id].directoryRead`). SEP-2133 extension
- * negotiation — which SEP-2640 normatively defers to ("Per SEP-2133 extension
- * negotiation") — wraps settings in a `{ specVersion, stability, config }`
- * envelope, putting the flag at `extensions[id].config.directoryRead`. The two
- * SEPs are inconsistent on nesting, so a brand-neutral conformance check accepts
- * either location rather than privileging one reading of an ambiguous spec.
- * (The inconsistency is worth a WG clarification; see the scenario docs.)
+ * Reads only the inline location the SEPs specify. A server that buries the
+ * flag inside an envelope fails `sep-2640-capability-declaration-inline` and is
+ * treated here as not having declared the optional method, which is the
+ * conservative reading: a client that follows the spec would not see the flag
+ * either, and "clients MUST NOT call resources/directory/read against a server
+ * that has not declared directoryRead: true".
  */
 export function directoryReadDeclared(
   skills: Record<string, unknown>
 ): boolean {
-  if (skills.directoryRead === true) return true;
-  const config = skills.config as Record<string, unknown> | undefined;
-  return config?.directoryRead === true;
+  return skills.directoryRead === true;
 }
 
 /** Everything from `resources/list`, paginating until `nextCursor` clears. */
@@ -148,20 +200,84 @@ export async function listAllResources(
   return out;
 }
 
+/** One page of `skills/list`, kept separate so pagination can be inspected. */
+export interface SkillsListPage {
+  result: SkillsListResult;
+  entries: SkillEntry[];
+}
+
 /**
- * Read `skill://index.json`. Returns the raw JSON text (for parse-error
- * reporting) or a `JsonRpcError` when the server declines the well-known index
- * — a permitted MAY (SEP-2640 §Enumeration): the catalog may be unenumerable.
+ * Call `skills/list` once, optionally with a cursor. Returns a `JsonRpcError`
+ * rather than throwing so a scenario can distinguish "method not implemented"
+ * (a FAILURE, since the method is mandatory for a declaring server) from a
+ * transport fault.
  */
-export async function readSkillIndexText(
-  conn: Connection
-): Promise<{ text?: string; mimeType?: string } | { error: JsonRpcError }> {
+export async function skillsListPage(
+  conn: Connection,
+  cursor?: string
+): Promise<SkillsListPage | { error: JsonRpcError }> {
   try {
-    const res = await conn.request<{
-      contents?: Array<{ text?: string; mimeType?: string }>;
-    }>('resources/read', { uri: SKILL_INDEX_URI });
-    const entry = (res.contents ?? []).find((c) => typeof c.text === 'string');
-    return { text: entry?.text, mimeType: entry?.mimeType };
+    const result = await conn.request<SkillsListResult>(
+      SKILLS_LIST_METHOD,
+      cursor ? { cursor } : {}
+    );
+    const entries = Array.isArray(result.skills)
+      ? (result.skills as SkillEntry[])
+      : [];
+    return { result, entries };
+  } catch (e) {
+    if (e instanceof JsonRpcError) return { error: e };
+    throw e;
+  }
+}
+
+/**
+ * Every entry from `skills/list`, following `nextCursor`. `pages` is retained
+ * so the atomic-entry and pagination checks can reason about page boundaries.
+ * Bounded to avoid looping forever against a server that returns a constant
+ * cursor.
+ */
+export async function skillsListAll(
+  conn: Connection,
+  maxPages = 50
+): Promise<
+  | { entries: SkillEntry[]; pages: SkillsListPage[]; truncated: boolean }
+  | { error: JsonRpcError }
+> {
+  const pages: SkillsListPage[] = [];
+  const entries: SkillEntry[] = [];
+  let cursor: string | undefined;
+  const seenCursors = new Set<string>();
+
+  for (let i = 0; i < maxPages; i++) {
+    const page = await skillsListPage(conn, cursor);
+    if ('error' in page) return page;
+    pages.push(page);
+    entries.push(...page.entries);
+    const next = page.result.nextCursor;
+    if (typeof next !== 'string' || next.length === 0) {
+      return { entries, pages, truncated: false };
+    }
+    if (seenCursors.has(next)) {
+      // A repeating cursor is a server bug; stop rather than spin.
+      return { entries, pages, truncated: true };
+    }
+    seenCursors.add(next);
+    cursor = next;
+  }
+  return { entries, pages, truncated: true };
+}
+
+/** Call `skills/get` for one skill URI. */
+export async function skillsGet(
+  conn: Connection,
+  uri: string
+): Promise<{ result: SkillsGetResult } | { error: JsonRpcError }> {
+  try {
+    const result = await conn.request<SkillsGetResult>(SKILLS_GET_METHOD, {
+      uri
+    });
+    return { result };
   } catch (e) {
     if (e instanceof JsonRpcError) return { error: e };
     throw e;
@@ -188,20 +304,32 @@ export async function readResourceText(
 /**
  * The skill name recoverable from a `SKILL.md` resource URI: the final segment
  * of `<skill-path>`, i.e. the last path segment before the trailing
- * `SKILL.md`. Returns `undefined` when the URI is not a `skill://…/SKILL.md`.
+ * `SKILL.md`. Returns `undefined` when the URI does not end in `/SKILL.md`.
+ *
+ * Scheme-agnostic by design: the SEP is explicit that "no scheme is
+ * privileged" and that the structural constraints "apply regardless of
+ * scheme", so a server serving skills under `github://` is judged by the same
+ * path rule as one using `skill://`.
  *
  *   skill://org/team/deploy/SKILL.md -> "deploy"
- *   skill://lint/SKILL.md            -> "lint"
+ *   github://acme/repo/lint/SKILL.md -> "lint"
  */
 export function skillNameFromManifestUri(uri: string): string | undefined {
-  if (!uri.startsWith(SKILL_URI_SCHEME)) return undefined;
+  const schemeEnd = uri.indexOf('://');
+  if (schemeEnd < 0) return undefined;
   const parts = uri
-    .slice(SKILL_URI_SCHEME.length)
+    .slice(schemeEnd + 3)
     .split('/')
     .filter((p) => p.length > 0);
   if (parts.length < 2) return undefined;
   if (parts[parts.length - 1] !== SKILL_MANIFEST_FILENAME) return undefined;
   return parts[parts.length - 2];
+}
+
+/** The skill's root directory URI: its `SKILL.md` URI with the file removed. */
+export function skillRootFromManifestUri(uri: string): string | undefined {
+  if (!uri.endsWith(`/${SKILL_MANIFEST_FILENAME}`)) return undefined;
+  return uri.slice(0, -`/${SKILL_MANIFEST_FILENAME}`.length);
 }
 
 /**
@@ -224,4 +352,26 @@ export function parseFrontmatter(
   } catch {
     return undefined;
   }
+}
+
+/** True when the entry's `resources` is the `"dynamic"` sentinel. */
+export function isDynamicResources(entry: SkillEntry): boolean {
+  return entry.resources === RESOURCES_DYNAMIC;
+}
+
+/**
+ * The entry's `resources` array, or `undefined` when it is `"dynamic"`, absent,
+ * or any other value. Callers distinguish those cases via `isDynamicResources`.
+ */
+export function resourcesArray(
+  entry: SkillEntry
+): SkillResourceEntry[] | undefined {
+  return Array.isArray(entry.resources)
+    ? (entry.resources as SkillResourceEntry[])
+    : undefined;
+}
+
+/** A short, stable label for an entry, for error messages. */
+export function entryLabel(entry: SkillEntry, i: number): string {
+  return typeof entry.uri === 'string' ? entry.uri : `skills[${i}]`;
 }

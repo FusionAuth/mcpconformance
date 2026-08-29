@@ -21,12 +21,11 @@ import {
   SKILLS_EXTENSION_ID,
   SKILLS_META_PREFIX,
   SEP_2640_REF,
-  type SkillIndex,
   type SkillResource,
   skillsCapability,
   skillsCheck,
   listAllResources,
-  readSkillIndexText,
+  skillsListAll,
   readResourceText,
   skillNameFromManifestUri,
   parseFrontmatter
@@ -94,20 +93,12 @@ export class SkillsManifestScenario implements ClientScenario {
       );
       let manifestUri = manifestResource?.uri;
       if (!manifestUri) {
-        const idx = await readSkillIndexText(conn);
-        if (!('error' in idx) && typeof idx.text === 'string') {
-          try {
-            const index = JSON.parse(idx.text) as SkillIndex;
-            const entry = (index.skills ?? []).find(
-              (e) =>
-                e.type === 'skill-md' &&
-                typeof e.url === 'string' &&
-                isManifestUri(e.url)
-            );
-            manifestUri = entry?.url;
-          } catch {
-            // A malformed index is the index scenario's concern; ignore here.
-          }
+        const listed = await skillsListAll(conn);
+        if (!('error' in listed)) {
+          const entry = listed.entries.find(
+            (e) => typeof e.uri === 'string' && isManifestUri(e.uri)
+          );
+          manifestUri = entry?.uri as string | undefined;
         }
       }
 

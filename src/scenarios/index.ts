@@ -59,7 +59,7 @@ import {
 } from './server/resources';
 
 import { SkillsDirectoryReadScenario } from './server/skills/directory';
-import { SkillsIndexScenario } from './server/skills/index';
+import { SkillsEnumerationScenario } from './server/skills/enumeration';
 import { SkillsManifestScenario } from './server/skills/manifest';
 
 import {
@@ -162,7 +162,7 @@ const pendingClientScenariosList: ClientScenario[] = [
   // SEP-2640-conformant fixture via
   // `npm start -- server --scenario sep-2640-skills-* --url <fixture>`.
   new SkillsDirectoryReadScenario(),
-  new SkillsIndexScenario(),
+  new SkillsEnumerationScenario(),
   new SkillsManifestScenario()
 ];
 
@@ -218,7 +218,7 @@ const allClientScenariosList: ClientScenario[] = [
   // Skills extension (SEP-2640). Fixture-dependent (needs a SEP-2640 server);
   // each scenario SKIPs cleanly when the extension is not declared.
   new SkillsDirectoryReadScenario(),
-  new SkillsIndexScenario(),
+  new SkillsEnumerationScenario(),
   new SkillsManifestScenario(),
 
   // Prompts scenarios

@@ -27,13 +27,12 @@ import {
   SEP_2640_REF,
   JSONRPC_METHOD_NOT_FOUND,
   JSONRPC_INVALID_PARAMS,
-  type SkillIndex,
   type SkillResource,
   skillsCapability,
   directoryReadDeclared,
   skillsCheck,
   listAllResources,
-  readSkillIndexText,
+  skillsListAll,
   skillNameFromManifestUri
 } from './helpers';
 
@@ -81,26 +80,19 @@ function skillRootFromManifestUri(uri: string): string | undefined {
 async function discoverDirectory(
   conn: Connection
 ): Promise<DirectoryTarget | undefined> {
-  // 1. skill-md entry in skill://index.json — its SKILL.md URL gives us both a
-  //    directory (the skill root) and a known file (the SKILL.md itself).
-  const idx = await readSkillIndexText(conn);
-  if (!('error' in idx) && typeof idx.text === 'string') {
-    try {
-      const index = JSON.parse(idx.text) as SkillIndex;
-      const entry = (index.skills ?? []).find(
-        (e) =>
-          e.type === 'skill-md' &&
-          typeof e.url === 'string' &&
-          skillRootFromManifestUri(e.url) !== undefined
-      );
-      if (entry?.url) {
-        return {
-          dirUri: skillRootFromManifestUri(entry.url)!,
-          fileUri: entry.url
-        };
-      }
-    } catch {
-      // A malformed index is the index scenario's concern; keep discovering.
+  // 1. A skills/list entry — its SKILL.md URI gives us both a directory (the
+  //    skill root) and a known file (the SKILL.md itself). An unenumerable
+  //    catalog returns nothing here, so discovery falls through.
+  const listed = await skillsListAll(conn);
+  if (!('error' in listed)) {
+    const entry = listed.entries.find(
+      (e) =>
+        typeof e.uri === 'string' &&
+        skillRootFromManifestUri(e.uri) !== undefined
+    );
+    const uri = entry?.uri as string | undefined;
+    if (uri) {
+      return { dirUri: skillRootFromManifestUri(uri)!, fileUri: uri };
     }
   }
 

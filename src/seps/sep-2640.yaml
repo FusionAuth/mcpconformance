@@ -1,46 +1,71 @@
-# spec_source: modelcontextprotocol/modelcontextprotocol@556154c088371149c120172e95bb634655f00cbe seps/2640-skills-extension.md
-# extracted: 2026-06-05
-# forward_reference: rows sep-2640-capability-directory-read-flag through
-#   sep-2640-directory-read-pagination track SEP commit
-#   2e04c48da90224000e750ffd54a3611f2824fbc0 (2026-06-09) — the
-#   resources/directory/read addition. The file-level provenance above
-#   stays at 556154c because the PR 97 schema rewrite (360123d0,
-#   2026-06-08) made 3 existing rows stale (sep-2640-index-entry-type-enum,
-#   sep-2640-index-name-required, sep-2640-index-digest-required) and
-#   drifted ~11 others' verbatim wording. Full re-extraction at SEP HEAD
-#   is mcpkit#780's lifecycle; this file deliberately holds at 556154c
-#   until that lands.
+# spec_source: modelcontextprotocol/modelcontextprotocol@sep/skills-extension seps/2640-skills-extension.md
+# extracted: 2026-08-28
+#
+# provenance: re-extracted against the 2026-08-21 revision, which the core
+#   maintainers produced after their second review round and which went back up
+#   for CM vote on 2026-08-25. The prior extraction held at 556154c (2026-06-05)
+#   by an explicit decision to wait for mcpkit#780; that hold expired badly.
+#   The 08-21 revision:
+#     - removed the `skill://index.json` well-known resource entirely (it now
+#       appears nowhere in the SEP) and replaced it with the `skills/list` and
+#       `skills/get` methods, both mandatory for a declaring server;
+#     - deferred archive distribution to an appendix ("Appendix: Deferred
+#       Features"), retiring the `type` enum and every archive requirement;
+#     - reversed the nesting rule: a `SKILL.md` MAY now appear in a descendant
+#       directory, where the June text forbade it;
+#     - reshaped the entry to `{uri, frontmatter, resources}`, where `resources`
+#       is a complete `{uri, digest, size}` array or the string `"dynamic"`;
+#     - fixed per-skill limits of 512 resource entries and 16 MiB;
+#     - added host obligations around lazy retrieval, content-bound approval and
+#       frontmatter re-verification.
+#   Eight rows from the prior extraction were removed as no longer normative
+#   (server-expose-index, index-entry-type-enum, no-nested-skills, and the five
+#   archive rows) and four were reworded. Because the SEP is mid-vote, expect one
+#   more pass at the CM-stamped head.
+#
 # backing_scenarios: three server ClientScenarios under
 #   src/scenarios/server/skills/ emit the check IDs below (a row is "tested"
 #   once a scenario emits its check ID; see src/traceability/):
-#     directory.ts (sep-2640-skills-directory) — sep-2640-capability-directory-read-flag
-#       and the five sep-2640-directory-read-* rows.
-#     index.ts (sep-2640-skills-index) — sep-2640-server-expose-index,
-#       sep-2640-index-entry-type-enum, sep-2640-index-name-required,
-#       sep-2640-index-digest-required, sep-2640-skill-uri-scheme.
+#     enumeration.ts (sep-2640-skills-enumeration) — the capability rows, the
+#       sep-2640-skills-list-* rows, the entry-schema and resources rows, the two
+#       limit rows, and the sep-2640-skills-get-* rows. Replaces the retired
+#       index.ts, which tested `skill://index.json`.
 #     manifest.ts (sep-2640-skills-manifest) — sep-2640-skillmd-mimetype,
 #       sep-2640-skillmd-metadata-name, sep-2640-skillmd-metadata-description,
 #       sep-2640-final-segment-equals-name, sep-2640-meta-prefix.
-#   The remaining rows are host-internal or off-wire (host load-by-uri, digest
-#   verification, byte-budget / archive-unpack safety, no-empty-index
-#   assumption) and stay traceability-only for this server-scenario set.
+#     directory.ts (sep-2640-skills-directory) —
+#       sep-2640-capability-directory-read-flag and the
+#       sep-2640-directory-read-* rows.
+#   The remaining rows are host-internal or off-wire (host retrieval policy,
+#   digest and frontmatter verification, approval binding, cache isolation) and
+#   stay traceability-only for this server-scenario set. A host-side scenario
+#   set would be needed to exercise them.
 sep: 2640
 spec_url: https://modelcontextprotocol.io/seps/2640-skills-extension#specification
 requirements:
+  # === Skill Format ===
   - check: sep-2640-skillmd-required
     text: 'Every skill MUST contain a `SKILL.md` file at its root.'
   - check: sep-2640-skillmd-frontmatter
     text: '`SKILL.md` MUST begin with YAML frontmatter containing at minimum the `name` and `description` fields as defined by the Agent Skills specification.'
+
+  # === Resource Mapping ===
   - check: sep-2640-skill-uri-scheme
     text: 'Each file within a skill directory is exposed as an MCP resource. Servers SHOULD use the `skill://` URI scheme, under which the resource URI has the form: `skill://<skill-path>/<file-path>`'
   - check: sep-2640-final-segment-equals-name
     text: "The final segment of `<skill-path>` MUST equal the skill's `name` as declared in its `SKILL.md` frontmatter."
-  - check: sep-2640-no-nested-skills
-    text: 'A `SKILL.md` MUST NOT appear in any descendant directory of a skill. The skill directory is the boundary; skills do not nest inside other skills.'
   - check: sep-2640-name-naming-rules
     text: "The final `<skill-path>` segment, being the skill `name`, MUST satisfy the Agent Skills specification's naming rules."
-  - check: sep-2640-prefix-rfc3986
-    text: 'Prefix segments SHOULD be valid URI path segments per RFC 3986; no further constraints are imposed on them.'
+  - check: sep-2640-authority-reg-name
+    text: 'The first `<skill-path>` segment occupies the authority component and SHOULD be a valid `reg-name` per RFC 3986; any other prefix segments SHOULD be valid URI path segments; no further constraints are imposed on them.'
+  # Reverses the retired sep-2640-no-nested-skills row: the June text said a
+  # SKILL.md MUST NOT appear in any descendant directory.
+  - check: sep-2640-nested-skills-permitted
+    text: 'A `SKILL.md` MAY appear in a descendant directory of a skill — skills can nest.'
+  - check: sep-2640-nested-publication-flat
+    text: "A nested skill is published like any other: through its own `skills/list` entry, or by explicit reference. The listing remains flat — an entry for a nested skill is an ordinary entry whose `uri` happens to share a path prefix with the enclosing skill's, and nothing in the listing marks nesting."
+
+  # === Resource Metadata ===
   - check: sep-2640-skillmd-mimetype
     text: 'For each `skill://<skill-path>/SKILL.md` resource: `mimeType` SHOULD be `text/markdown`.'
   - check: sep-2640-skillmd-metadata-name
@@ -49,36 +74,119 @@ requirements:
     text: 'For each `skill://<skill-path>/SKILL.md` resource: `description` SHOULD be set from the `description` field of the `SKILL.md` YAML frontmatter.'
   - check: sep-2640-meta-prefix
     text: 'When `_meta` keys are used for skill resources, implementations SHOULD use the `io.modelcontextprotocol.skills/` reverse-domain prefix.'
-  - check: sep-2640-host-load-by-uri
-    text: 'hosts MUST support loading a skill given only its URI'
-  - check: sep-2640-server-expose-index
-    text: 'A server SHOULD expose a resource at the well-known URI `skill://index.json` whose content is a JSON index of the skills it serves.'
-  - check: sep-2640-index-entry-type-enum
-    text: '`skills[].type` MUST be `"skill-md"` or `"archive"`.'
-  - check: sep-2640-index-name-required
-    text: '`skills[].name` matches the `SKILL.md` frontmatter `name` and the final segment of the skill path.'
-  - check: sep-2640-index-digest-required
-    text: '`skills[].digest` is the SHA-256 content digest of the artifact, formatted as `sha256:{hex}` (64 lowercase hex characters).'
-  - check: sep-2640-client-ignore-unrecognized
-    text: 'Clients SHOULD ignore unrecognized fields and SHOULD skip entries with an unrecognized `type`.'
-  - check: sep-2640-archive-format
-    text: 'the archive MUST be `.tar.gz` (gzip-compressed tar, `mimeType` `application/gzip`) or `.zip` (`mimeType` `application/zip`)'
-  - check: sep-2640-host-support-archive-formats
-    text: 'hosts MUST support both `.tar.gz` and `.zip` archive formats'
-  - check: sep-2640-archive-skillmd-at-root
-    text: 'Archive contents represent the skill directory directly — `SKILL.md` MUST be at the archive root, not nested inside a wrapper directory'
-  - check: sep-2640-archive-no-traversal
-    text: 'the archive MUST NOT contain path-traversal sequences (`..`) or absolute paths'
-  - check: sep-2640-host-archive-safety
-    text: 'Hosts unpacking an archive MUST apply the archive safety requirements of the Agent Skills specification: reject archives containing path-traversal sequences or absolute paths, reject symlinks or hard links that resolve outside the skill directory, and enforce a limit on total unpacked size / Hosts MUST validate archives per the Agent Skills archive safety requirements: reject path traversal and absolute paths, reject links resolving outside the skill directory, and bound total unpacked size to prevent decompression bombs.'
-  - check: sep-2640-host-verify-digest
-    text: 'Hosts MUST verify retrieved content against the `digest` in the index / hosts MUST NOT use unverified content.'
-  - check: sep-2640-host-no-empty-index-assumption
-    text: 'Hosts MUST NOT treat an absent or empty index as proof that a server has no skills.'
 
-  # resources/directory/read additions (SEP commit 2e04c48d, 2026-06-09)
+  # === Capability Declaration ===
+  # The inline-settings row is the check that would have caught panyam/mcpkit#1334.
+  # SEP-2133 (status Final) defines `extensions` as "a map of extension
+  # identifiers to per-extension settings objects" and defines no envelope; the
+  # SEP-2640 capability block matches it.
+  - check: sep-2640-capability-declaration-inline
+    text: 'Per SEP-2133 extension negotiation, servers declare support for this extension in their `initialize` response, mapping the extension identifier directly to its per-extension settings object: `{"capabilities": {"extensions": {"io.modelcontextprotocol/skills": {"directoryRead": true}}}}`.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#capability-declaration
+  - check: sep-2640-capability-commits-to-methods
+    text: 'Declaring the extension itself commits the server to `skills/list` and `skills/get`.'
+  - check: sep-2640-capability-empty-object
+    text: 'An empty object indicates support for the extension with no optional features.'
   - check: sep-2640-capability-directory-read-flag
     text: 'Clients MUST NOT call `resources/directory/read` against a server that has not declared `directoryRead: true`.'
+
+  # === Discovery: enumeration via skills/list ===
+  - check: sep-2640-skills-list-implemented
+    text: 'A server declaring the `io.modelcontextprotocol/skills` extension MUST implement the `skills/list` method, which returns the skills it serves. The result MAY be empty.'
+  - check: sep-2640-skills-list-pagination
+    text: 'Pagination mirrors the base protocol''s list methods: the request accepts an optional `cursor`, and when the result includes `nextCursor` the client passes it back to retrieve the next page.'
+  - check: sep-2640-skills-list-entry-atomic
+    text: "An entry is atomic — a skill's `resources` set is never split across pages."
+  - check: sep-2640-skills-list-cache-attributes
+    text: 'In protocol versions 2026-07-28 and later, the result also carries the base protocol''s list-caching attributes — `ttlMs` and `cacheScope`, as defined for `tools/list` and `resources/list` (SEP-2549) — with the same semantics: a freshness hint for the listing and a cache-scope marker, not an integrity property.'
+  - check: sep-2640-skills-list-may-be-partial
+    text: 'A server whose skill catalog is large, generated on demand, or otherwise unenumerable MAY return an empty or partial listing.'
+  - check: sep-2640-host-no-empty-listing-assumption
+    text: 'Hosts MUST NOT treat an empty or partial listing as proof that a server has no skills.'
+  - check: sep-2640-enumeration-scheme-uniform
+    text: 'The method serves entries for a server''s skills whatever URI scheme they use — enumeration is uniform across schemes.'
+
+  # === The skill entry (shared by skills/list and skills/get) ===
+  - check: sep-2640-entry-uri-required
+    text: '`skills[].uri` (Yes): Resource URI of the skill''s `SKILL.md`.'
+  - check: sep-2640-entry-frontmatter-required
+    text: "`frontmatter` is the skill's `SKILL.md` YAML frontmatter rendered verbatim as a JSON object — every field the author wrote, not a curated subset. Because the Agent Skills specification requires `name` and `description`, those fields are always present."
+  - check: sep-2640-entry-frontmatter-identical
+    text: 'The `frontmatter` object MUST be identical in content to the frontmatter of the `SKILL.md` it describes.'
+  - check: sep-2640-entry-uri-matches-frontmatter-name
+    text: "The final `<skill-path>` segment of the entry's `uri` MUST equal `frontmatter.name`, per Resource Mapping."
+  - check: sep-2640-metadata-reserved-prefix
+    text: 'Within the frontmatter `metadata` object, keys prefixed with `io.modelcontextprotocol/` are reserved for metadata defined by MCP extensions. This extension currently defines no such keys. Implementations SHOULD ignore keys under this prefix that they do not recognize.'
+  - check: sep-2640-names-not-unique
+    text: "A skill's `name` is a label, not an identifier. Within a server's listing, names SHOULD be unique, but they are not guaranteed to be. Hosts MUST NOT assume name uniqueness. When two entries in one listing collide on `name`, hosts MUST disambiguate them — for example by their distinguishing path segments — rather than silently discarding or preferring one."
+
+  # === resources ===
+  - check: sep-2640-entry-resources-required
+    text: '`resources` is REQUIRED on every skill entry and takes one of two forms: an array enumerating the skill''s files — `SKILL.md` and every supporting file — as `{uri, digest, size}` triples, or the string `"dynamic"`.'
+  - check: sep-2640-resources-complete
+    text: 'When present, `resources` MUST be complete: it lists every file of the skill, each exactly once, including an entry matching the skill''s top-level `uri` — that entry carries the digest and size of `SKILL.md` itself.'
+  - check: sep-2640-resources-uri-within-skill
+    text: 'Each `uri` MUST be the skill''s `SKILL.md` or a file within the skill''s directory.'
+  - check: sep-2640-resources-digest-format
+    text: 'Digests are SHA-256 hashes of an artifact''s raw bytes, formatted as `sha256:{hex}` where `{hex}` is 64 lowercase hexadecimal characters. Each entry in a skill''s `resources` carries the digest of the file at its `uri`.'
+  - check: sep-2640-resources-size-required
+    text: 'Each entry MUST carry `size`: the length in bytes of the file''s raw content — the same bytes the `digest` covers.'
+  - check: sep-2640-resources-dynamic-marker
+    text: 'When a skill''s content is generated dynamically, such that stable digests cannot be published, the server MUST set `"resources": "dynamic"` instead of an array.'
+  - check: sep-2640-resources-invalid-entry
+    text: 'An entry with no `resources` at all, or with any value other than an array or `"dynamic"`, is invalid, and hosts MUST NOT load it.'
+  - check: sep-2640-resources-nested-completeness
+    text: "Completeness extends to nested skills: from the enclosing skill's perspective their files are supporting files, so the enclosing skill's `resources` lists them too, and the same file may appear in both the enclosing and the nested skill's entries."
+
+  # === Limits ===
+  - check: sep-2640-limit-resources-per-skill
+    text: 'Resources per skill: 512 entries, counted over the entries of the skill''s `resources`, `SKILL.md` included.'
+  - check: sep-2640-limit-total-size
+    text: 'Total file size per skill: 16 MiB (16,777,216 bytes), counted over the sum of `size` over the skill''s `resources`.'
+  - check: sep-2640-limit-host-support
+    text: 'Hosts MUST support skills up to and including these limits, and MAY support larger ones. Servers SHOULD NOT serve a skill that exceeds either limit; a skill that does is not guaranteed to be loadable by any conforming host.'
+
+  # === Retrieval via skills/get ===
+  - check: sep-2640-skills-get-implemented
+    text: 'A server declaring the `io.modelcontextprotocol/skills` extension MUST also implement the `skills/get` method, which returns the entry for a single skill named by its URI.'
+  - check: sep-2640-skills-get-entry-shape
+    text: 'The `skill` object is a skill entry, identical in shape and meaning to an entry of `skills/list` — the same `uri`, `frontmatter`, and `resources` fields, under the same rules.'
+  - check: sep-2640-skills-get-unknown-uri-invalid-params
+    text: 'If the URI does not identify a skill the server serves, the server MUST return error `-32602` (Invalid params) — the same code `resources/read` uses for unknown resources.'
+  - check: sep-2640-skills-get-answers-unlisted
+    text: 'A server MUST answer for every skill it serves, whether or not that skill appears in its `skills/list` result. A skill absent from a partial listing is still retrievable by URI.'
+  - check: sep-2640-skills-get-no-cursor
+    text: 'The result carries no pagination cursor: a single entry is not a list.'
+
+  # === Reading / integrity (host obligations) ===
+  - check: sep-2640-host-load-by-uri
+    text: 'hosts MUST support loading a skill given only its URI'
+  - check: sep-2640-host-verify-digest
+    text: 'When a host retrieves a file listed in a skill''s `resources`, it MUST verify the content against that entry''s digest. Whatever the cause, hosts MUST NOT use the unverified content.'
+  - check: sep-2640-host-size-mismatch-failure
+    text: 'A read whose byte length differs from the entry''s `size` is a verification failure equivalent to a digest mismatch, whether or not the host goes on to compute the digest.'
+  - check: sep-2640-host-unlisted-read-failure
+    text: 'While acting on a skill, a host MUST resolve reads of the skill''s files only to URIs listed in that entry''s `resources`, and MUST treat a read of an unlisted file within the skill as a verification failure equivalent to a digest mismatch.'
+  - check: sep-2640-host-no-prefetch
+    text: 'Hosts MUST NOT retrieve a skill''s files ahead of need — not on connection, not on listing, and not at approval. A `SKILL.md` is fetched when the skill is loaded, and a supporting file when it is read.'
+  - check: sep-2640-host-frontmatter-comparison
+    text: 'After fetching a `SKILL.md` for which the host holds an entry, hosts MUST parse its YAML frontmatter and compare it field-by-field against the entry''s `frontmatter`. Any discrepancy MUST be treated as a verification failure equivalent to a digest mismatch, and the skill MUST NOT be loaded.'
+  - check: sep-2640-host-digest-not-security-boundary
+    text: 'Digests are unsigned and supplied by the same server that supplies the content. A match proves the two are consistent, not that either is trustworthy. Hosts MUST NOT treat a digest match as a security boundary.'
+  - check: sep-2640-host-skill-identity-pair
+    text: 'The identity of an MCP-served skill is the pair of the host''s identity for the originating server and the skill''s `uri`. Hosts MUST preserve both halves wherever a skill is recorded or addressed — the registry, persisted approvals, the cache, and any tool or path through which the model reaches the skill — and MUST NOT key any of these on the `uri` alone.'
+  - check: sep-2640-host-not-skill-by-scheme
+    text: 'A host MUST NOT conclude that a resource is a skill merely because its URI carries a particular scheme.'
+  - check: sep-2640-host-cross-origin-no-shadow
+    text: 'When skills from different origins collide on `name`, hosts MUST resolve the name within a per-origin namespace, identifying servers by a host-assigned label; an MCP-served skill MUST NOT silently shadow, or be silently substituted for, a same-named skill from any other origin.'
+  - check: sep-2640-host-content-bound-approval
+    text: 'When a host persists any per-skill user approval, it MUST be bound to the entry''s `resources` set — every `uri` and `digest` — observed at the moment of approval. If a subsequent entry for that skill advertises a different set, the host MUST treat the prior approval as revoked and re-prompt before loading or executing.'
+  - check: sep-2640-host-dynamic-not-content-bound
+    text: 'A skill whose `resources` is `"dynamic"` cannot be content-bound: hosts MAY decline to load it, and MUST NOT treat a persisted approval as covering whatever content the server currently serves.'
+  - check: sep-2640-host-nested-fresh-consent
+    text: 'Activating a nested skill — loading it as a skill in its own right — requires fresh, explicit user consent; approval of the enclosing skill does not substitute for it. A nested `SKILL.md` read as supporting content is ordinary markdown: hosts MUST NOT act on its frontmatter.'
+
+  # === Directory Listing (resources/directory/read) ===
   - check: sep-2640-directory-read-method-registered
     text: 'A server that declares `directoryRead` MUST support the method for every directory within the skill namespaces it serves as individual files.'
   - check: sep-2640-directory-read-subdir-mimetype
@@ -89,11 +197,14 @@ requirements:
     text: 'The method applies only to directory resources. If the URI does not exist, or exists but is not a directory resource, the server MUST return error `-32602` (Invalid params) — the same code `resources/read` uses for unknown resources.'
   - check: sep-2640-directory-read-pagination
     text: 'Pagination mirrors `resources/list`: when the result includes `nextCursor`, the client passes it back as `cursor` to retrieve the next page.'
+  - check: sep-2640-directory-read-empty-dir
+    text: 'An empty directory yields an empty `resources` array.'
+  - check: sep-2640-directory-read-not-manifest-extension
+    text: 'Hosts MUST NOT treat the directory result as extending the manifest. While acting on the skill under the held entry, the host MUST NOT read a newly listed child — an unlisted file is a verification failure, exactly as a digest mismatch is — and MUST NOT surface it to the model as a file of the skill.'
 
+  # === Excluded: not observable on the MCP wire ===
   - text: 'Per RFC 3986, the first segment of `<skill-path>` occupies the authority component. This carries no special semantics under this convention and clients MUST NOT attempt DNS or network resolution of it.'
     excluded: 'DNS and network resolution sit below the MCP wire layer; the harness cannot observe whether the client performed name lookups on URI authority components.'
-  - text: "[Hosts] SHOULD determine the format from the resource's `mimeType`, falling back to the URL suffix"
-    excluded: 'Internal decision logic: when `mimeType` and URL suffix agree, the harness cannot distinguish a host that branched on `mimeType` from one that fell back to the suffix.'
   - text: 'Hosts MUST treat MCP-served skill content as untrusted model input, subject to the same prompt-injection defenses applied to any server-provided text. A server being connected does not make its skill content authoritative.'
     excluded: 'Internal host policy: "treats as untrusted" is an assertion about how content is reasoned over downstream of the read, not about wire traffic.'
     url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
@@ -109,3 +220,16 @@ requirements:
   - text: "Hosts SHOULD indicate which server a skill originates from when presenting it, SHOULD let users inspect a skill's content before it is loaded into model context"
     excluded: 'UI presentation requirements (origin indicator, pre-load inspection); the harness cannot observe what the host displays to users.'
     url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - text: 'A host is _acting on_ a skill from the moment it loads the skill''s `SKILL.md` into the model''s context until, at the earliest, that `SKILL.md` leaves context; hosts MAY hold the window open longer, never shorter.'
+    excluded: 'The window is defined by what is in the model''s context, which is host-internal state the harness cannot observe. It scopes several wire-observable rules but is not itself checkable.'
+  - text: 'Hosts SHOULD instead cache what they do retrieve, and digests make that cache cheap to validate: a cached file whose digest matches the current entry can be served without fetching it again.'
+    excluded: 'Cache hits are the absence of a request. A harness cannot distinguish a compliant cache from a host that simply did not need the file again.'
+  - text: 'Any path at which a host materializes skill content, whether a cache directory or a virtual mount, MUST encode the server identity as well as the `uri`, so that same-URI skills from different servers land at distinct paths.'
+    excluded: 'Disk layout and cache-path construction are host-local filesystem concerns with no wire representation.'
+    url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
+  - text: 'A host that declines a skill on this basis SHOULD tell the user why rather than fail silently on a later read.'
+    excluded: 'User-facing messaging; not protocol-observable.'
+  - text: 'For a skill whose `resources` is `"dynamic"`, the entry offers nothing to count. A host that chooses to load such a skill applies the total-size limit to what it actually retrieves and MAY stop loading the skill once that limit is reached.'
+    excluded: 'A host stopping mid-load is indistinguishable on the wire from a host that needed no further files.'
+  - text: 'Hosts SHOULD expect this sequence and present it as such — a skill that has changed and needs re-approval — rather than as a read error.'
+    excluded: 'User-facing presentation of the stale-entry recovery path; not protocol-observable.'
