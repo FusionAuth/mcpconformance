@@ -27,10 +27,16 @@
  *   make tokens-context
  */
 
-const BASE_URL = (process.env.FA_BASE_URL ?? 'http://localhost:9011').replace(/\/$/, '');
-const CLIENT_ID = process.env.FA_CLIENT_ID ?? 'b1b2c3d4-0003-0003-0003-000000000001';
-const CLIENT_SECRET = process.env.FA_CLIENT_SECRET ?? 'mcp-test-secret-for-client-entity';
-const TARGET_ENTITY_ID = process.env.FA_TARGET_ENTITY_ID ?? 'b1b2c3d4-0002-0002-0002-000000000001';
+const BASE_URL = (process.env.FA_BASE_URL ?? 'http://localhost:9011').replace(
+  /\/$/,
+  ''
+);
+const CLIENT_ID =
+  process.env.FA_CLIENT_ID ?? 'b1b2c3d4-0003-0003-0003-000000000001';
+const CLIENT_SECRET =
+  process.env.FA_CLIENT_SECRET ?? 'mcp-test-secret-for-client-entity';
+const TARGET_ENTITY_ID =
+  process.env.FA_TARGET_ENTITY_ID ?? 'b1b2c3d4-0002-0002-0002-000000000001';
 
 const TOKEN_ENDPOINT = `${BASE_URL}/oauth2/token`;
 
@@ -41,12 +47,12 @@ async function mint(permission: string): Promise<string> {
     method: 'POST',
     headers: {
       Authorization: `Basic ${basic}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/x-www-form-urlencoded'
     },
     body: new URLSearchParams({
       grant_type: 'client_credentials',
-      scope,
-    }),
+      scope
+    })
   });
   const data = (await res.json()) as {
     access_token?: string;
@@ -63,9 +69,9 @@ async function mint(permission: string): Promise<string> {
 
 async function main() {
   const [insufficient, sufficient, acceptedHierarchy] = await Promise.all([
-    mint('tools-read'),   // valid token WITHOUT admin-write
-    mint('admin-write'),  // satisfies the scope gate
-    mint('admin'),        // OR-hierarchy parent of admin-write
+    mint('tools-read'), // valid token WITHOUT admin-write
+    mint('admin-write'), // satisfies the scope gate
+    mint('admin') // OR-hierarchy parent of admin-write
   ]);
 
   const context = {
@@ -73,7 +79,7 @@ async function main() {
     tokens: { insufficient, sufficient, acceptedHierarchy },
     requiredScope: 'admin-write',
     scopeGatedTool: 'admin_call',
-    features: { acceptedScopes: true },
+    features: { acceptedScopes: true }
   };
   console.log(JSON.stringify(context));
 }
