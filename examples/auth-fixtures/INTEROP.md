@@ -26,7 +26,7 @@ All cells re-verified **2026-08-29** except FusionAuth (first run **2026-08-31**
 | ----------------------------------------------------------------------------- | -------- | ------ | ---------- | ------- | ----- | ------ |
 | **TypeScript (PR 1624 ref)** — `panyam/mcp-ts-sdk` `examples/scope-challenge` | ✅ 9/9   | ✅ 9/9 | —          | —       | —     | —      |
 | **mcpkit (Go)** — `panyam/mcpkit` `examples/auth/step-up`                     | ✅ 9/9   | ✅ 9/9 | —          | —       | —     | —      |
-| **scope-challenge-server.ts** (string-match SUT)                               | ✅ 8/8   | —      | ✅ 8/8     | —       | —     | —      |
+| **scope-challenge-server.ts** (string-match SUT)                              | ✅ 8/8   | —      | ✅ 8/8     | —       | —     | —      |
 
 Legend: ✅ N/9 = checks passing · — = not yet run · ⚠️ = partial (see notes).
 
